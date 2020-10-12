@@ -137,7 +137,7 @@ class DPCTGAN(CTGANSynthesizer):
             opacus.supported_layers_grad_samplers._create_or_extend_grad_sample = _custom_create_or_extend_grad_sample
 
 
-    def train(self, data, categorical_columns=None, ordinal_columns=None, update_epsilon=None):
+    def train(self, data, categorical_columns=None, ordinal_columns=None, update_epsilon=None, verbose=False):
         if update_epsilon:
             self.epsilon = update_epsilon
 
@@ -297,7 +297,8 @@ class DPCTGAN(CTGANSynthesizer):
                     cross_entropy = self._cond_loss(fake, c1, m1)
 
                 if self.loss=='cross_entropy':
-                    label_g = torch.full((int(self.batch_size/self.pack),1), REAL_LABEL, dtype=torch.float, device=self.device)
+                    label_g = torch.full((int(self.batch_size/self.pack),1), REAL_LABEL,
+                    dtype=torch.float, device=self.device)
                     loss_g = criterion(y_fake, label_g)
                     loss_g = loss_g + cross_entropy
                 else:
@@ -332,7 +333,8 @@ class DPCTGAN(CTGANSynthesizer):
             self.loss_g_list.append(loss_g)
             if self.verbose:
                 print("Epoch %d, Loss G: %.4f, Loss D: %.4f" %
-                  (i + 1, loss_g.detach().cpu(), loss_d.detach().cpu()), flush=True)
+                  (i + 1, loss_g.detach().cpu(), loss_d.detach().cpu()),
+                  flush=True)
                 print ('epsilon is {e}, alpha is {a}'.format(e=epsilon, a = best_alpha))
 
         return self.loss_d_list, self.loss_g_list, self.epsilon_list, self.alpha_list
@@ -364,3 +366,36 @@ class DPCTGAN(CTGANSynthesizer):
         data = np.concatenate(data, axis=0)
         data = data[:n]
         return self.transformer.inverse_transform(data, None)
+
+    def save(self, path):
+        assert hasattr(self, "generator")
+        assert hasattr(self, "teacher_disc")
+        assert hasattr(self, "student_disc")
+        assert hasattr(self, "cond_generator")
+        assert hasattr(self, "cond_generator_t")
+
+        # always save a cpu model.
+        device_bak = self.device
+        self.device = torch.device("cpu")
+        self.generator.to(self.device)
+        for i in range(self.num_teachers):
+            self.teacher_disc[i].to(self.device)
+        self.student_disc.to(self.device)
+
+        torch.save(self, path)
+
+        self.device = device_bak
+        self.generator.to(self.device)
+        for i in range(self.num_teachers):
+            self.teacher_disc[i].to(self.device)
+        self.student_disc.to(self.device)
+
+    @classmethod
+    def load(cls, path):
+        model = torch.load(path)
+        model.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        model.generator.to(model.device)
+        model.student_disc.to(model.device)
+        for i in range(model.num_teachers):
+            model.teacher_disc[i].to(model.device)
+        return model

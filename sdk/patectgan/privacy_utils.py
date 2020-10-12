@@ -7,12 +7,12 @@ def weights_init(m):
     if type(m) == nn.Linear:
         nn.init.xavier_uniform_(m.weight)
 
-def pate(data, teachers, lap_scale):
+def pate(data, teachers, lap_scale, device="cpu"):
     num_teachers = len(teachers)
-    labels = torch.Tensor(num_teachers, data.shape[0]).type(torch.int64)
+    labels = torch.Tensor(num_teachers, data.shape[0]).type(torch.int64).to(device)
     for i in range(num_teachers):
         output = teachers[i](data)
-        pred = (output > 0.5).type(torch.Tensor).squeeze()
+        pred = (output > 0.5).type(torch.Tensor).squeeze().to(device)
         labels[i] = pred
 
     votes = torch.sum(labels, dim=0).unsqueeze(1).type(torch.DoubleTensor)
@@ -22,9 +22,9 @@ def pate(data, teachers, lap_scale):
 
     return noisy_labels, votes
 
-def moments_acc(num_teachers, votes, lap_scale, l_list):
-    q = (2 + lap_scale * torch.abs(2*votes - num_teachers)
-        ) / (4 * torch.exp(lap_scale * torch.abs(2*votes - num_teachers)))
+def moments_acc(num_teachers, votes, lap_scale, l_list, device="cpu"):
+    q = (2 + lap_scale * torch.abs(2*votes - num_teachers).to(device)
+        ) / (4 * torch.exp(lap_scale * torch.abs(2*votes - num_teachers))).to(device)
 
     alpha = []
     for l in l_list:
@@ -34,4 +34,4 @@ def moments_acc(num_teachers, votes, lap_scale, l_list):
         t = t_one + t_two
         alpha.append(torch.clamp(t, max=a).sum())
 
-    return torch.DoubleTensor(alpha)
+    return torch.DoubleTensor(alpha).to(device)

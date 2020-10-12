@@ -9,8 +9,7 @@ python -m pip install -e evaluation
 
 ToDo:
 - Add DPSDGym
-- Add GPU support for models
 - Add saving of models
 - Add unit tests
+- Support Incremental Training for DPGAN and PATEGAN (by saving the Preprocessor)
 - Compare / Test against other losses
-- Remove sklearn warnings

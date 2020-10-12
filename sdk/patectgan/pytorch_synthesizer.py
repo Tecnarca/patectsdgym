@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from patectgan.preprocessing import GeneralTransformer
+import pickle
 
 class SDGYMBaseSynthesizer():
     """
@@ -43,8 +44,9 @@ class PytorchDPSynthesizer(SDGYMBaseSynthesizer):
         self.dtypes = None
 
         self.data_columns = None
+        self.flag = True
     
-    def fit(self, data, categorical_columns=tuple(), ordinal_columns=tuple()):
+    def fit(self, data, categorical_columns=tuple(), ordinal_columns=tuple(), update_epsilon=None, verbose=False):
         if isinstance(data, pd.DataFrame):
             self.data_columns = data.columns
 
@@ -52,13 +54,15 @@ class PytorchDPSynthesizer(SDGYMBaseSynthesizer):
         self.ordinal_columns = ordinal_columns
         self.dtypes = data.dtypes
 
-        if not self.epsilon:
-            self.epsilon = 1.0
+        if update_epsilon:
+            self.epsilon = update_epsilon
 
         if self.preprocessor:
-            self.preprocessor.fit(data, categorical_columns, ordinal_columns)
+            if(self.flag):
+                self.preprocessor.fit(data, categorical_columns, ordinal_columns)
+                self.flag = False
             preprocessed_data = self.preprocessor.transform(data)
-            self.gan.train(preprocessed_data, categorical_columns=categorical_columns, ordinal_columns=ordinal_columns, update_epsilon=self.epsilon)
+            self.gan.train(preprocessed_data, categorical_columns=categorical_columns, ordinal_columns=ordinal_columns, update_epsilon=self.epsilon, verbose=verbose)
         else:
             self.gan.train(data, categorical_columns=categorical_columns, ordinal_columns=ordinal_columns, update_epsilon=self.epsilon)
     
@@ -79,3 +83,15 @@ class PytorchDPSynthesizer(SDGYMBaseSynthesizer):
             raise ValueError("Generated data is neither numpy array nor dataframe!")
 
         return synth_data
+
+    def save(self, path):
+        self.gan.save(path)
+        if self.preprocessor is not None:
+            with open(path+".pre", 'wb') as prep_save:
+                pickle.dump(self.preprocessor, prep_save)
+
+    def load(self, path):
+        self.gan = self.gan.load(path)
+        if self.preprocessor is not None:
+            with open(path+".pre", 'rb') as prep_save:
+                self.preprocessor = pickle.load(prep_save)

@@ -8,11 +8,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
-from ctgan import CTGANSynthesizer
-
 from patectgan.privacy_utils import weights_init, pate, moments_acc
 
-import torch
 from torch import optim
 from torch.nn import functional
 import torch.nn as nn
@@ -21,27 +18,25 @@ from torch.nn import BatchNorm1d, Dropout, LeakyReLU, Linear, Module, ReLU, Sequ
 from torch.nn import functional as F
 
 import ctgan
+from ctgan import CTGANSynthesizer
 from ctgan.transformer import DataTransformer
 from ctgan.conditional import ConditionalGenerator 
-
 from ctgan.models import Generator
+from ctgan.sampler import Sampler
 
-from ctgan.sampler import Sampler 
-
-from ctgan import CTGANSynthesizer
 from torch.autograd import Variable, grad
 
 class Discriminator(Module):
 
     def dragan_penalty(self, real_data, device='cpu', c=10, lambda_=10):
 
-        alpha = torch.rand(real_data.shape[0],1).expand(real_data.shape)
-        delta = torch.normal(mean=0.0, std=c, size=real_data.shape) # 0.5 * real_data.std() * torch.rand(real_data.shape)
+        alpha = torch.rand(real_data.shape[0],1, device=device).expand(real_data.shape)
+        delta = torch.normal(mean=0.0, std=c, size=real_data.shape, device=device) # 0.5 * real_data.std() * torch.rand(real_data.shape)
         x_hat = Variable(alpha * real_data + (1 - alpha) * (real_data + delta), requires_grad=True)
 
         pred_hat = self(x_hat.float())
 
-        gradients = torch.autograd.grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()), create_graph=True, retain_graph=True, only_inputs=True)[0]
+        gradients = torch.autograd.grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size(), device=device), create_graph=True, retain_graph=True, only_inputs=True)[0]
         dragan_penalty = lambda_ * ((gradients.norm(2, dim=1) - 1) ** 2).mean()
 
         return dragan_penalty
@@ -81,7 +76,7 @@ class PATECTGAN(CTGANSynthesizer):
                  target_delta=None,
                  sigma = 5,
                  max_per_sample_grad_norm=1.0,
-                 verbose=True,
+                 
                  loss = 'cross_entropy',
                  regularization = None, #regularizations supported: 'dragan'
                  binary=False,
@@ -104,7 +99,6 @@ class PATECTGAN(CTGANSynthesizer):
         self.pack=pack
         self.log_frequency = log_frequency
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.verbose=verbose
         self.loss=loss
         self.regularization=regularization
         self.sample_per_teacher = sample_per_teacher
@@ -120,52 +114,64 @@ class PATECTGAN(CTGANSynthesizer):
         self.pd_cols = None
         self.pd_index = None
 
-    def train(self, data, categorical_columns=None, ordinal_columns=None, update_epsilon=None):
+    def train(self, data, categorical_columns=None, ordinal_columns=None, update_epsilon=None, verbose=False):
         if update_epsilon:
             self.epsilon = update_epsilon
 
-        # this is to make sure each teacher has some samples
-        sample_per_teacher = self.sample_per_teacher if self.sample_per_teacher < len(data) else 1000
-        self.num_teachers = int(len(data) / sample_per_teacher) + 1
-        self.transformer = DataTransformer()
-        self.transformer.fit(data, discrete_columns=categorical_columns)
+
+        if not hasattr(self, "transformer"):
+            self.transformer = DataTransformer()
+            self.transformer.fit(data, discrete_columns=categorical_columns)
+        
         data = self.transformer.transform(data)
-        data_partitions = np.array_split(data, self.num_teachers)
+        
         
         data_dim = self.transformer.output_dimensions
         
-        self.cond_generator = ConditionalGenerator(data, self.transformer.output_info, self.log_frequency)
+        if not hasattr(self, "cond_generator"):
+            self.cond_generator = ConditionalGenerator(data, self.transformer.output_info, self.log_frequency)
         
-        # create conditional generator for each teacher model 
-        cond_generator = [ConditionalGenerator(d, self.transformer.output_info, self.log_frequency) for d in data_partitions]
 
-        self.generator = Generator(
+
+        if not hasattr(self, "generator"):
+            self.generator = Generator(
             self.embedding_dim + self.cond_generator.n_opt,
             self.gen_dim,
             data_dim).to(self.device)
 
-        discriminator = Discriminator(
+        if not hasattr(self, "discriminator"):
+            self.discriminator = Discriminator(
             data_dim + self.cond_generator.n_opt,
             self.dis_dim, 
             self.loss,
             self.pack).to(self.device)
 
-        student_disc = discriminator
-        student_disc.apply(weights_init)
+        if not hasattr(self, "student_disc"):
+            self.student_disc = self.discriminator
+            self.student_disc.apply(weights_init)
 
-        teacher_disc = [discriminator for i in range(self.num_teachers)]
-        for i in range (self.num_teachers):
-            teacher_disc[i].apply(weights_init)
+        if not hasattr(self, "teacher_disc"):
+            # this is to make sure each teacher has some samples
+            sample_per_teacher = self.sample_per_teacher if self.sample_per_teacher < len(data) else 1000
+            self.num_teachers = int(len(data) / sample_per_teacher) + 1
+            self.data_partitions = np.array_split(data, self.num_teachers)
+            # create conditional generator for each teacher model 
+            self.cond_generator_t = [ConditionalGenerator(d, self.transformer.output_info, self.log_frequency) for d in self.data_partitions]
+            self.teacher_disc = [self.discriminator for i in range(self.num_teachers)]
+            for i in range (self.num_teachers):
+                self.teacher_disc[i].apply(weights_init)
 
-        optimizerG = optim.Adam(self.generator.parameters(), lr=2e-4, betas=(0.5, 0.9), weight_decay=self.l2scale)
-        optimizerS = optim.Adam(student_disc.parameters(), lr=2e-4, betas=(0.5, 0.9))
-        optimizerT = [optim.Adam(teacher_disc[i].parameters(), lr=2e-4, betas=(0.5, 0.9)) for i in range(self.num_teachers)]
+        if not hasattr(self, "optimizerG"):
+            self.optimizerG = optim.Adam(self.generator.parameters(), lr=2e-4, betas=(0.5, 0.9), weight_decay=self.l2scale)
+        if not hasattr(self, "optimizerS"):    
+            self.optimizerS = optim.Adam(self.student_disc.parameters(), lr=2e-4, betas=(0.5, 0.9))
+        if not hasattr(self, "optimizerT"):    
+            self.optimizerT = [optim.Adam(self.teacher_disc[i].parameters(), lr=2e-4, betas=(0.5, 0.9)) for i in range(self.num_teachers)]
         
-        
-        noise_multiplier = self.noise_multiplier
-        alphas = torch.tensor([0.0 for i in range(self.moments_order)])
-        l_list = 1 + torch.tensor(range(self.moments_order))
-        eps = 0
+        if not hasattr(self, "train_eps"):
+            self.alphas = torch.tensor([0.0 for i in range(self.moments_order)], device=self.device)
+            self.l_list = 1 + torch.tensor(range(self.moments_order), device=self.device)
+            self.train_eps = 0
         
         mean = torch.zeros(self.batch_size, self.embedding_dim, device=self.device)
         std = mean + 1
@@ -175,19 +181,19 @@ class PATECTGAN(CTGANSynthesizer):
 
         criterion = nn.BCELoss() if(self.loss == "cross_entropy") else self.WLoss
 
-        if(self.verbose):
+        if(verbose):
             print("using loss {} and regularization {}".format(self.loss,self.regularization))
 
-        while eps < self.epsilon:
+        while self.train_eps < self.epsilon:
             # train teacher discriminators
             for t_2 in range(self.teacher_iters):
                 for i in range(self.num_teachers):
                     
-                    partition_data = data_partitions[i]              
+                    partition_data = self.data_partitions[i]              
                     data_sampler = Sampler(partition_data, self.transformer.output_info)
-                    fakez = torch.normal(mean, std=std)
+                    fakez = torch.normal(mean, std=std).to(self.device)
 
-                    condvec = cond_generator[i].sample(self.batch_size)
+                    condvec = self.cond_generator_t[i].sample(self.batch_size)
 
                     if condvec is None:
                         c1, m1, col, opt = None, None, None, None
@@ -214,9 +220,9 @@ class PATECTGAN(CTGANSynthesizer):
                         real_cat = real
                         fake_cat = fake
                     
-                    optimizerT[i].zero_grad()
+                    self.optimizerT[i].zero_grad()
 
-                    y_all = torch.cat([teacher_disc[i](fake_cat), teacher_disc[i](real_cat)])
+                    y_all = torch.cat([self.teacher_disc[i](fake_cat), self.teacher_disc[i](real_cat)])
                     label_fake = torch.full((int(self.batch_size/self.pack),1), FAKE_LABEL, dtype=torch.float, device=self.device)
                     label_true = torch.full((int(self.batch_size/self.pack),1), REAL_LABEL, dtype=torch.float, device=self.device)
                     labels = torch.cat([label_fake, label_true])
@@ -225,15 +231,15 @@ class PATECTGAN(CTGANSynthesizer):
                     errD.backward()
 
                     if(self.regularization == 'dragan'):
-                        pen = teacher_disc[i].dragan_penalty(real_cat)
+                        pen = self.teacher_disc[i].dragan_penalty(real_cat, device=self.device)
                         pen.backward(retain_graph=True)
                     
-                    optimizerT[i].step()
+                    self.optimizerT[i].step()
 
             # train student discriminator
             for t_3 in range(self.student_iters):
                 data_sampler = Sampler(data, self.transformer.output_info)
-                fakez = torch.normal(mean, std=std)
+                fakez = torch.normal(mean, std=std).to(self.device)
 
                 condvec = self.cond_generator.sample(self.batch_size)
                 
@@ -260,30 +266,30 @@ class PATECTGAN(CTGANSynthesizer):
                     fake_cat = fake
 
                 fake_data = fake_cat
-                predictions, votes = pate(fake_data, teacher_disc, noise_multiplier)
+                predictions, votes = pate(fake_data, self.teacher_disc, self.noise_multiplier, self.device)
 
-                output = student_disc(fake_data.detach())
+                output = self.student_disc(fake_data.detach())
 
                 # update moments accountant
-                alphas = alphas + moments_acc(self.num_teachers, votes, noise_multiplier, l_list)
+                self.alphas = self.alphas + moments_acc(self.num_teachers, votes, self.noise_multiplier, self.l_list, self.device)
 
                 loss_s = criterion(output, predictions.float().to(self.device))
 
-                optimizerS.zero_grad()
+                self.optimizerS.zero_grad()
                 loss_s.backward()
 
                 if(self.regularization == 'dragan'):
-                    vals = torch.cat([predictions, fake_data], axis=1)
+                    vals = torch.cat([predictions.float().to(self.device), fake_data], axis=1)
                     ordered = vals[vals[:,0].sort()[1]]
                     data_list = torch.split(ordered, predictions.shape[0] - int(predictions.sum().item()))
                     synth_cat = torch.cat(data_list[1:], axis=0)[:, 1:]
-                    pen = student_disc.dragan_penalty(synth_cat)
+                    pen = self.student_disc.dragan_penalty(synth_cat, device=self.device)
                     pen.backward(retain_graph=True)
 
-                optimizerS.step()
+                self.optimizerS.step()
 
                 #train generator
-                fakez = torch.normal(mean=mean, std=std)
+                fakez = torch.normal(mean=mean, std=std).to(self.device)
                 condvec = self.cond_generator.sample(self.batch_size)
 
                 if condvec is None:
@@ -298,9 +304,9 @@ class PATECTGAN(CTGANSynthesizer):
                 fakeact = self._apply_activate(fake)
     
                 if c1 is not None:
-                    y_fake = student_disc(torch.cat([fakeact, c1], dim=1))
+                    y_fake = self.student_disc(torch.cat([fakeact, c1], dim=1))
                 else:
-                    y_fake = student_disc(fakeact)
+                    y_fake = self.student_disc(fakeact)
     
                 if condvec is None:
                     cross_entropy = 0
@@ -314,14 +320,14 @@ class PATECTGAN(CTGANSynthesizer):
                 else:
                     loss_g = -torch.mean(y_fake) + cross_entropy
 
-                optimizerG.zero_grad()
+                self.optimizerG.zero_grad()
                 loss_g.backward()
-                optimizerG.step()
+                self.optimizerG.step()
 
-                eps = min((alphas - math.log(self.delta)) / l_list)
+                self.train_eps = min((self.alphas - math.log(self.delta)) / self.l_list)
             
-            if(self.verbose):
-                print ('eps: {:f} \t G: {:f} \t D: {:f}'.format(eps, loss_g.detach().cpu(), loss_s.detach().cpu()))
+            if(verbose):
+                print ('eps: {:f} \t G: {:f} \t D: {:f}'.format(self.train_eps, loss_g.detach().cpu(), loss_s.detach().cpu()))
 
 
     def WLoss(self, output, labels):
@@ -363,3 +369,36 @@ class PATECTGAN(CTGANSynthesizer):
         generated_data = self.transformer.inverse_transform(data, None)
         
         return generated_data
+
+    def save(self, path):
+        assert hasattr(self, "generator")
+        assert hasattr(self, "teacher_disc")
+        assert hasattr(self, "student_disc")
+        assert hasattr(self, "cond_generator")
+        assert hasattr(self, "cond_generator_t")
+
+        # always save a cpu model.
+        device_bak = self.device
+        self.device = torch.device("cpu")
+        self.generator.to(self.device)
+        for i in range(self.num_teachers):
+            self.teacher_disc[i].to(self.device)
+        self.student_disc.to(self.device)
+
+        torch.save(self, path)
+
+        self.device = device_bak
+        self.generator.to(self.device)
+        for i in range(self.num_teachers):
+            self.teacher_disc[i].to(self.device)
+        self.student_disc.to(self.device)
+
+    @classmethod
+    def load(cls, path):
+        model = torch.load(path)
+        model.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        model.generator.to(model.device)
+        model.student_disc.to(model.device)
+        for i in range(model.num_teachers):
+            model.teacher_disc[i].to(model.device)
+        return model

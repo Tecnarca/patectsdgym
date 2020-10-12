@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 from sklearn.mixture import BayesianGaussianMixture
+from sklearn.exceptions import ConvergenceWarning
+import warnings
 
 def get_metadata(data, categorical_columns=tuple(), ordinal_columns=tuple()):
     meta = []
@@ -53,6 +55,7 @@ class GeneralTransformer():
         self.components = []
         for id_, info in enumerate(self.meta):
             if info['type'] == "continuous":
+                warnings.filterwarnings("ignore", category=ConvergenceWarning)
                 gm = BayesianGaussianMixture(
                     self.n_clusters,
                     weight_concentration_prior_type='dirichlet_process',

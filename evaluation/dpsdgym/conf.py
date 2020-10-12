@@ -8,7 +8,7 @@ from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 
 from patectgan.pytorch_synthesizer import PytorchDPSynthesizer
 from patectgan.preprocessing import GeneralTransformer
-from patectgan.architectures import DPGAN, PATEGAN, DPCTGAN, PATECTGAN
+from patectgan.architectures import DPGAN, PATEGAN, DPCTGAN, PATECTGAN 
 
 # Keep seed consistent for reproducibility 
 SEED = 42
