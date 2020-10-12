@@ -95,3 +95,4 @@ class PytorchDPSynthesizer(SDGYMBaseSynthesizer):
         if self.preprocessor is not None:
             with open(path+".pre", 'rb') as prep_save:
                 self.preprocessor = pickle.load(prep_save)
+                self.flag = False
