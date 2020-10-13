@@ -18,6 +18,7 @@ from ctgan import CTGANSynthesizer
 import opacus
 from opacus import autograd_grad_sample
 from opacus import PrivacyEngine, utils
+import dill
 
 class Discriminator(Module):
 
@@ -141,42 +142,49 @@ class DPCTGAN(CTGANSynthesizer):
         if update_epsilon:
             self.epsilon = update_epsilon
 
-        self.transformer = DataTransformer()
-        self.transformer.fit(data, discrete_columns=categorical_columns)
+        if not hasattr(self, "transformer"):
+            self.transformer = DataTransformer()
+            self.transformer.fit(data, discrete_columns=categorical_columns)
+
         train_data = self.transformer.transform(data)
 
         data_sampler = Sampler(train_data, self.transformer.output_info)
 
         data_dim = self.transformer.output_dimensions
-        self.cond_generator = ConditionalGenerator(train_data, self.transformer.output_info, self.log_frequency)
 
-        self.generator = Generator(
-            self.embedding_dim + self.cond_generator.n_opt,
-            self.gen_dim,
-            data_dim).to(self.device)
+        if not hasattr(self, "cond_generator"):
+            self.cond_generator = ConditionalGenerator(train_data, self.transformer.output_info, self.log_frequency)
 
-        discriminator = Discriminator(
-            data_dim + self.cond_generator.n_opt,
-            self.dis_dim, 
-            self.loss,
-            self.pack).to(self.device)
+            self.generator = Generator(
+                self.embedding_dim + self.cond_generator.n_opt,
+                self.gen_dim,
+                data_dim).to(self.device)
 
-        optimizerG = optim.Adam(
-            self.generator.parameters(), lr=2e-4, betas=(0.5, 0.9), weight_decay=self.l2scale)
-        optimizerD = optim.Adam(discriminator.parameters(), lr=2e-4, betas=(0.5, 0.9))
+            self.discriminator = Discriminator(
+                data_dim + self.cond_generator.n_opt,
+                self.dis_dim, 
+                self.loss,
+                self.pack).to(self.device)
+
+            self.optimizerG = optim.Adam(
+                self.generator.parameters(), lr=2e-4, betas=(0.5, 0.9), weight_decay=self.l2scale)
+            self.optimizerD = optim.Adam(self.discriminator.parameters(), lr=2e-4, betas=(0.5, 0.9))
         
-        privacy_engine = opacus.PrivacyEngine(
-            discriminator,
-            batch_size=self.batch_size,
-            sample_size=train_data.shape[0],
-            alphas=[1 + x / 10.0 for x in range(1, 100)] + list(range(12, 64)),
-            noise_multiplier=self.sigma,
-            max_grad_norm=self.max_per_sample_grad_norm,
-            clip_per_layer=True
-        )
+        if not hasattr(self, "privacy_engine"):
+            privacy_engine = opacus.PrivacyEngine(
+                self.discriminator,
+                batch_size=self.batch_size,
+                sample_size=train_data.shape[0],
+                alphas=[1 + x / 10.0 for x in range(1, 100)] + list(range(12, 64)),
+                noise_multiplier=self.sigma,
+                max_grad_norm=self.max_per_sample_grad_norm,
+                clip_per_layer=True
+            )
+        else:
+            privacy_engine = self.privacy_engine
 
         if not self.disabled_dp:
-            privacy_engine.attach(optimizerD)
+            privacy_engine.attach(self.optimizerD)
 
         one = torch.tensor(1, dtype=torch.float).to(self.device)
         mone = one * -1
@@ -221,48 +229,45 @@ class DPCTGAN(CTGANSynthesizer):
                     real_cat = real
                     fake_cat = fake
 
-                optimizerD.zero_grad()
+                self.optimizerD.zero_grad()
 
 
                 if self.loss == 'cross_entropy':
-                    y_fake = discriminator(fake_cat)
-                    
-                 #   print ('y_fake is {}'.format(y_fake))
+
+                    y_fake = self.discriminator(fake_cat)
                     label_fake = torch.full((int(self.batch_size/self.pack),1), FAKE_LABEL, dtype=torch.float, device=self.device)
                     
-                #    print ('label_fake is {}'.format(label_fake))
-   
                     errD_fake = criterion(y_fake, label_fake)
                     errD_fake.backward()
-                    optimizerD.step()
+                    self.optimizerD.step()
 
                     # train with real
                     label_true = torch.full((int(self.batch_size/self.pack),1), REAL_LABEL, dtype=torch.float, device=self.device)
-                    y_real = discriminator(real_cat)
+                    y_real = self.discriminator(real_cat)
                     errD_real = criterion(y_real, label_true)
                     errD_real.backward()
-                    optimizerD.step()
+                    self.optimizerD.step()
 
                     loss_d = errD_real + errD_fake
 
                 else:
 
-                    y_fake = discriminator(fake_cat)
+                    y_fake = self.discriminator(fake_cat)
                     mean_fake = torch.mean(y_fake)
                     mean_fake.backward(one)
 
 
-                    y_real = discriminator(real_cat)
+                    y_real = self.discriminator(real_cat)
                     mean_real = torch.mean(y_real)
                     mean_real.backward(mone)
                     
-                    optimizerD.step()
+                    self.optimizerD.step()
 
 
                     loss_d = -(mean_real - mean_fake)
 
                 max_grad_norm = []
-                for p in discriminator.parameters():
+                for p in self.discriminator.parameters():
                     param_norm = p.grad.data.norm(2).item()
                     max_grad_norm.append(param_norm)
                 #pen = calc_gradient_penalty(discriminator, real_cat, fake_cat, self.device)
@@ -287,9 +292,9 @@ class DPCTGAN(CTGANSynthesizer):
                 fakeact = self._apply_activate(fake)
 
                 if c1 is not None:
-                    y_fake = discriminator(torch.cat([fakeact, c1], dim=1))
+                    y_fake = self.discriminator(torch.cat([fakeact, c1], dim=1))
                 else:
-                    y_fake = discriminator(fakeact)
+                    y_fake = self.discriminator(fakeact)
 
                 if condvec is None:
                     cross_entropy = 0
@@ -304,38 +309,36 @@ class DPCTGAN(CTGANSynthesizer):
                 else:
                     loss_g = -torch.mean(y_fake) + cross_entropy
 
-                optimizerG.zero_grad()
+                self.optimizerG.zero_grad()
                 loss_g.backward()
-                optimizerG.step()
+                self.optimizerG.step()
 
                 if not self.disabled_dp:
                     #if self.loss == 'cross_entropy':
                     #    autograd_grad_sample.clear_backprops(discriminator)
                     #else:
-                    for p in discriminator.parameters():
+                    for p in self.discriminator.parameters():
                         if hasattr(p, "grad_sample"):
                             del p.grad_sample 
 
                     if self.target_delta is None:
                         self.target_delta = 1/train_data.shape[0]
 
-                    epsilon, best_alpha = optimizerD.privacy_engine.get_privacy_spent(self.target_delta)
+                    epsilon, best_alpha = self.optimizerD.privacy_engine.get_privacy_spent(self.target_delta)
                     
                     self.epsilon_list.append(epsilon)
                     self.alpha_list.append(best_alpha)
-                    #if self.verbose:
-                        
-            
+                    if self.verbose:
+                        print ('eps: {:f} \t alpha: {:f} \t G: {:f} \t D: {:f}'.format(epsilon, best_alpha, loss_g.detach().cpu(), loss_d.detach().cpu()))
+
             if not self.disabled_dp:
                 if self.epsilon < epsilon:
                     break
             self.loss_d_list.append(loss_d)
             self.loss_g_list.append(loss_g)
-            if self.verbose:
-                print("Epoch %d, Loss G: %.4f, Loss D: %.4f" %
-                  (i + 1, loss_g.detach().cpu(), loss_d.detach().cpu()),
-                  flush=True)
-                print ('epsilon is {e}, alpha is {a}'.format(e=epsilon, a = best_alpha))
+            
+        privacy_engine.detach()
+        self.privacy_engine = privacy_engine 
 
         return self.loss_d_list, self.loss_g_list, self.epsilon_list, self.alpha_list
 
@@ -368,34 +371,24 @@ class DPCTGAN(CTGANSynthesizer):
         return self.transformer.inverse_transform(data, None)
 
     def save(self, path):
-        assert hasattr(self, "generator")
-        assert hasattr(self, "teacher_disc")
-        assert hasattr(self, "student_disc")
         assert hasattr(self, "cond_generator")
-        assert hasattr(self, "cond_generator_t")
 
         # always save a cpu model.
         device_bak = self.device
         self.device = torch.device("cpu")
         self.generator.to(self.device)
-        for i in range(self.num_teachers):
-            self.teacher_disc[i].to(self.device)
-        self.student_disc.to(self.device)
+        self.discriminator.to(self.device)
 
-        torch.save(self, path)
+        torch.save(self, path, pickle_module=dill)
 
         self.device = device_bak
         self.generator.to(self.device)
-        for i in range(self.num_teachers):
-            self.teacher_disc[i].to(self.device)
-        self.student_disc.to(self.device)
+        self.discriminator.to(self.device)
 
     @classmethod
     def load(cls, path):
         model = torch.load(path)
         model.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         model.generator.to(model.device)
-        model.student_disc.to(model.device)
-        for i in range(model.num_teachers):
-            model.teacher_disc[i].to(model.device)
+        model.discriminator.to(model.device)
         return model

@@ -175,6 +175,8 @@ class PATECTGAN(CTGANSynthesizer):
         
         mean = torch.zeros(self.batch_size, self.embedding_dim, device=self.device)
         std = mean + 1
+        one = torch.tensor(1, dtype=torch.float).to(self.device)
+        mone = one * -1
         
         REAL_LABEL = 1 
         FAKE_LABEL = 0

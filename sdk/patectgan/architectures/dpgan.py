@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from opacus import PrivacyEngine, utils, autograd_grad_sample
 
 from patectgan.privacy_utils import weights_init, pate, moments_acc
+import dill
 
 class Generator(nn.Module):
     def __init__(self, latent_dim, output_dim, binary=True):
@@ -95,7 +96,8 @@ class DPGAN:
         if hasattr(self, "state_dict"):
             self.optimizer_d.load_state_dict(self.state_dict)
         
-        privacy_engine = PrivacyEngine(
+        if not hasattr(self, "privacy_engine"):
+            privacy_engine = PrivacyEngine(
             self.discriminator,
             batch_size=self.batch_size,
             sample_size=len(data),
@@ -103,8 +105,10 @@ class DPGAN:
             noise_multiplier=3.5,
             max_grad_norm=1.0,
             clip_per_layer=True
-            )
-        
+            ).to(self.device)
+        else:
+            privacy_engine = self.privacy_engine
+
         privacy_engine.attach(self.optimizer_d)
         
         if not hasattr(self, "optimizer_g"):
@@ -113,12 +117,6 @@ class DPGAN:
         eps = 0
 
         criterion = nn.BCELoss()
-        
-        if hasattr(self,"trained_eps"):
-            if self.epsilon < eps+self.trained_eps:
-                return
-        else:
-            self.trained_eps = 0
 
         for epoch in range(self.epochs):
             for i, data in enumerate(dataloader):
@@ -173,14 +171,14 @@ class DPGAN:
                 self.alpha = best_alpha
 
             if(verbose):
-                print ('eps: {:f} \t alpha: {:f} \t G: {:f} \t D: {:f}'.format(eps+self.trained_eps, best_alpha, loss_g.detach().cpu(), loss_d.detach().cpu()))
+                print ('eps: {:f} \t alpha: {:f} \t G: {:f} \t D: {:f}'.format(eps, best_alpha, loss_g.detach().cpu(), loss_d.detach().cpu()))
 
-            if self.epsilon < eps+self.trained_eps:
+            if self.epsilon < eps:
                 break
 
-        self.trained_eps = eps+self.trained_eps
         privacy_engine.detach()
         self.state_dict = self.optimizer_d.state_dict()
+        self.privacy_engine = privacy_engine
 
     def generate(self, n):
         steps = n // self.batch_size + 1
@@ -207,7 +205,7 @@ class DPGAN:
         self.generator.to(self.device)
         self.discriminator.to(self.device)
 
-        torch.save(self, path)
+        torch.save(self, path, pickle_module=dill)
 
         self.device = device_bak
         self.generator.to(self.device)

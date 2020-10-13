@@ -58,7 +58,10 @@ class PATEGAN:
                  teacher_iters=5,
                  student_iters=5,
                  epsilon=1.0,
-                 delta=1e-5):
+                 delta=1e-5,
+                 verbose=False,
+                 sample_per_teacher=1000,
+                 moments_order=100):
         self.binary = binary
         self.latent_dim = latent_dim
         self.batch_size = batch_size
@@ -66,9 +69,11 @@ class PATEGAN:
         self.student_iters = student_iters
         self.epsilon = epsilon
         self.delta = delta
+        self.sample_per_teacher = sample_per_teacher
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
+        self.moments_order = moments_order
+        self.verbose = verbose
         self.pd_cols = None
         self.pd_index = None
     
@@ -87,37 +92,46 @@ class PATEGAN:
 
         data_dim = data.shape[1]
 
-        self.num_teachers = int(len(data) / 1000)
+        if not hasattr(self, "teacher_disc"):
+            sample_per_teacher = self.sample_per_teacher if self.sample_per_teacher < len(data) else 1000
+            self.num_teachers = int(len(data) / sample_per_teacher) + 1
+            self.data_partitions = np.array_split(data, self.num_teachers)
+            self.teacher_disc = [Discriminator(data_dim).double().to(self.device) for i in range(self.num_teachers)]
+            for i in range(self.num_teachers):
+                self.teacher_disc[i].apply(weights_init)
         
-        data_partitions = np.array_split(data, self.num_teachers)
-        tensor_partitions = [TensorDataset(torch.from_numpy(data.astype('double')).to(self.device)) for data in data_partitions]
+        tensor_partitions = [TensorDataset(torch.from_numpy(data.astype('double')).to(self.device)) for data in self.data_partitions]
         
         loader = []
         for teacher_id in range(self.num_teachers):
             loader.append(DataLoader(tensor_partitions[teacher_id], batch_size=self.batch_size, shuffle=True))
 
-        self.generator = Generator(self.latent_dim, data_dim, binary=self.binary).double().to(self.device)
-        self.generator.apply(weights_init)
+        if not hasattr(self, "generator"):
+            self.generator = Generator(self.latent_dim, data_dim, binary=self.binary).double().to(self.device)
+            self.generator.apply(weights_init)
         
-        student_disc = Discriminator(data_dim).double().to(self.device)
-        student_disc.apply(weights_init)
-
-        teacher_disc = [Discriminator(data_dim).double().to(self.device) for i in range(self.num_teachers)]
-        for i in range(self.num_teachers):
-            teacher_disc[i].apply(weights_init)
+        if not hasattr(self,"student_disc"):
+            self.student_disc = Discriminator(data_dim).double().to(self.device)
+            self.student_disc.apply(weights_init)
         
-        optimizer_g = optim.Adam(self.generator.parameters(), lr=1e-4)
-        optimizer_s = optim.Adam(student_disc.parameters(), lr=1e-4)
-        optimizer_t = [optim.Adam(teacher_disc[i].parameters(), lr=1e-4) for i in range(self.num_teachers)]
+        if not hasattr(self, "optimizer_g"):
+            self.optimizer_g = optim.Adam(self.generator.parameters(), lr=2e-4, betas=(0.5, 0.9))
+        if not hasattr(self, "optimizer_s"):    
+            self.optimizer_s = optim.Adam(self.student_disc.parameters(), lr=2e-4, betas=(0.5, 0.9))
+        if not hasattr(self, "optimizer_t"):    
+            self.optimizer_t = [optim.Adam(self.teacher_disc[i].parameters(), lr=2e-4, betas=(0.5, 0.9)) for i in range(self.num_teachers)]
+        
+        if not hasattr(self, "train_eps"):
+            self.alphas = torch.tensor([0.0 for i in range(self.moments_order)], device=self.device)
+            self.l_list = 1 + torch.tensor(range(self.moments_order), device=self.device)
+            self.train_eps = 0
+            self.noise_multiplier = 1e-3
 
         criterion = nn.BCELoss()
 
-        noise_multiplier = 1e-3
-        alphas = torch.tensor([0.0 for i in range(100)])
-        l_list = 1 + torch.tensor(range(100))
-        eps = 0
+        
 
-        while eps < self.epsilon:
+        while self.train_eps < self.epsilon:
             
             # train teacher discriminators
             for t_2 in range(self.teacher_iters):
@@ -127,11 +141,11 @@ class PATEGAN:
                         real_data = data[0].to(self.device)
                         break
                     
-                    optimizer_t[i].zero_grad()
+                    self.optimizer_t[i].zero_grad()
 
                     # train with real data
                     label_real = torch.full((real_data.shape[0],1), 1, dtype=torch.float, device=self.device)
-                    output = teacher_disc[i](real_data)
+                    output = self.teacher_disc[i](real_data)
                     loss_t_real = criterion(output, label_real.double())
                     loss_t_real.backward()
 
@@ -139,37 +153,40 @@ class PATEGAN:
                     noise = torch.rand(self.batch_size, self.latent_dim, device=self.device)
                     label_fake = torch.full((self.batch_size,1), 0, dtype=torch.float, device=self.device)
                     fake_data = self.generator(noise.double())
-                    output = teacher_disc[i](fake_data)
+                    output = self.teacher_disc[i](fake_data)
                     loss_t_fake = criterion(output, label_fake.double())
                     loss_t_fake.backward()
-                    optimizer_t[i].step()
+                    self.optimizer_t[i].step()
 
             # train student discriminator
             for t_3 in range(self.student_iters):
                 noise = torch.rand(self.batch_size, self.latent_dim, device=self.device)
-                fake_data = self.generator(noise.double())
-                predictions, votes = pate(fake_data, teacher_disc, noise_multiplier)
-                output = student_disc(fake_data.detach())
+                fake_data = self.generator(noise.double()).to(self.device)
+                predictions, votes = pate(fake_data, self.teacher_disc, self.noise_multiplier, device=self.device)
+                output = self.student_disc(fake_data.detach())
 
                 # update moments accountant
-                alphas = alphas + moments_acc(self.num_teachers, votes, noise_multiplier, l_list)
+                self.alphas = self.alphas + moments_acc(self.num_teachers, votes, self.noise_multiplier, self.l_list, self.device)
 
                 loss_s = criterion(output, predictions.to(self.device))
-                optimizer_s.zero_grad()
+                self.optimizer_s.zero_grad()
                 loss_s.backward()
-                optimizer_s.step()
+                self.optimizer_s.step()
 
             # train generator
             label_g = torch.full((self.batch_size,1), 1, dtype=torch.float, device=self.device)
             noise = torch.rand(self.batch_size, self.latent_dim, device=self.device)
             gen_data = self.generator(noise.double())
-            output_g = student_disc(gen_data)
+            output_g = self.student_disc(gen_data)
             loss_g = criterion(output_g, label_g.double())
-            optimizer_g.zero_grad()
+            self.optimizer_g.zero_grad()
             loss_g.backward()
-            optimizer_g.step()
+            self.optimizer_g.step()
 
-            eps = min((alphas - math.log(self.delta)) / l_list)
+            self.train_eps = min((self.alphas - math.log(self.delta)) / self.l_list)
+
+            if(verbose):
+                print ('eps: {:f} \t G: {:f} \t D: {:f}'.format(self.train_eps, loss_g.detach().cpu(), loss_s.detach().cpu()))
 
     def generate(self, n):
         steps = n // self.batch_size + 1
@@ -190,8 +207,6 @@ class PATEGAN:
         assert hasattr(self, "generator")
         assert hasattr(self, "teacher_disc")
         assert hasattr(self, "student_disc")
-        assert hasattr(self, "cond_generator")
-        assert hasattr(self, "cond_generator_t")
 
         # always save a cpu model.
         device_bak = self.device
