@@ -6,10 +6,14 @@ import numpy as np
 import pandas as pd
 
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
 from sklearn.metrics import accuracy_score, roc_auc_score, f1_score
 from sklearn.model_selection import cross_val_score
 
 from imblearn.over_sampling import SMOTE
+
+from warnings import simplefilter
+simplefilter(action='ignore', category=FutureWarning)
 
 import mlflow
 
@@ -189,8 +193,8 @@ def run_model_suite(args):
         X = optional_real_data.loc[:, optional_real_data.columns != target]
         y = optional_real_data.loc[:, optional_real_data.columns == target]
         _, x_test, _, y_test = train_test_split(X, y, test_size=test_size, random_state=seed)
-        x_test_synth = x_test
-        y_test_synth = y_test
+        #x_test_synth = x_test
+        #y_test_synth = y_test
 
     for model in conf.KNOWN_MODELS:
         m_name = type(model()).__name__
@@ -276,11 +280,22 @@ def run_ml_eval(data_dict, epsilons, run_name, seed=42, test_size=0.25):
 
         start = time.time()
         job_num = len(synthetic_runs)
-        # synthetic_accuracies = Parallel(n_jobs=job_num, verbose=1, backend="loky")(
-        #    map(delayed(run_model_suite), synthetic_runs))
         synthetic_accuracies = [x for x in map(run_model_suite, synthetic_runs)]
         end = time.time() - start
         print('ML evaluation suite finished in ' + str(end) + ' for ' + d)
         evals[d] = [real_accuracies] + synthetic_accuracies
 
     return evals
+
+def run_sra(data):
+    res = {}
+    for d in data:
+        real = data[d][0][1]
+        t = [data[d][0]]
+        synth = data[d][1:]
+        for s in synth:
+            rank = sra(real, s[1])
+            s = s + (rank,)
+            t.append(s)
+        res[d] = t
+    return res

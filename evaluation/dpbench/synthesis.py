@@ -2,6 +2,9 @@ import time
 from joblib import Parallel, delayed
 import mlflow
 
+from warnings import simplefilter
+simplefilter(action='ignore', category=FutureWarning)
+
 import conf
 
 def run_synthesis(synthesis_args):
