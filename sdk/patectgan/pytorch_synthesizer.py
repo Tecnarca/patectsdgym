@@ -22,13 +22,13 @@ class SDGYMBaseSynthesizer():
         """
         pass
 
-    def fit_sample(self, data, categorical_columns=None, ordinal_columns=None):
+    def fit_sample(self, data, categorical_columns=None, ordinal_columns=None, update_epsilon=None):
         """
         Common use case. Fits a synthetic data model to data, and returns
         # of samples equal to size of original dataset.
         Note data must be numpy array.
         """
-        self.fit(data, categorical_columns, ordinal_columns)
+        self.fit(data, categorical_columns, ordinal_columns, update_epsilon)
         return self.sample(data.shape[0])
 
 

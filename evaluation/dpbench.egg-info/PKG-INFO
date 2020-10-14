@@ -1,0 +1,22 @@
+Metadata-Version: 2.1
+Name: dpbench
+Version: 0.1.0.1
+Summary: UNKNOWN
+Home-page: UNKNOWN
+Author: Giacomo Astolfi
+License: MIT
+Description: # patectsdgym
+        A refactor and extension of the PATECTGAN model with an evaluation suite based on OpenDP
+        
+        To compile as a dynamic package:
+        python -m pip install -e sdk/
+        
+        To compile testing suite:
+        python -m pip install -e evaluation
+        
+        ToDo:
+        - Add DPSDGym
+        - Add unit tests
+        - Compare / Test against other losses
+Platform: UNKNOWN
+Description-Content-Type: text/markdown

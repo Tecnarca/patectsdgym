@@ -15,6 +15,29 @@ df = pd.read_csv(csv_path)
 
 
 
+print("Starting PATECTGAN...")
+patectgan = PytorchDPSynthesizer(PATECTGAN(loss="wasserstein", regularization="dragan"), None, epsilon=2)
+patectgan.fit(df, verbose=True)
+synth_data = patectgan.sample(df.size)
+s = synth_data.corr()
+d = df.corr()
+a = d.subtract(s)
+#print(a)
+
+print("Save and reload...")
+patectgan.save(os.path.join(git_root_dir, os.path.join("saved_models","patectgan.ckpt")))
+
+
+newInstance = PytorchDPSynthesizer(PATECTGAN(), None, epsilon=1)
+newInstance.load(os.path.join(git_root_dir, os.path.join("saved_models","patectgan.ckpt")))
+
+newInstance.fit(df,categorical_columns=['sex','educ','race','married'], update_epsilon=2)
+synth_data = newInstance.sample(df.size)
+s = synth_data.corr()
+d = df.corr()
+a2 = d.subtract(s)
+#print(a2.subtract(a))
+
 print("Starting DPCTGAN...")
 dpctgan = PytorchDPSynthesizer(DPCTGAN(verbose=True), epsilon=1)
 dpctgan.fit(df, categorical_columns=['sex','educ','race','married'])
@@ -56,28 +79,7 @@ d = df.corr()
 a2 = d.subtract(s)
 
 
-print("Starting PATECTGAN...")
-patectgan = PytorchDPSynthesizer(PATECTGAN(loss="wasserstein", regularization="dragan"), None, epsilon=2)
-patectgan.fit(df, categorical_columns=['sex','educ','race','married'], verbose=True)
-synth_data = patectgan.sample(df.size)
-s = synth_data.corr()
-d = df.corr()
-a = d.subtract(s)
-#print(a)
 
-print("Save and reload...")
-patectgan.save(os.path.join(git_root_dir, os.path.join("saved_models","patectgan.ckpt")))
-
-
-newInstance = PytorchDPSynthesizer(PATECTGAN(), None, epsilon=1)
-newInstance.load(os.path.join(git_root_dir, os.path.join("saved_models","patectgan.ckpt")))
-
-newInstance.fit(df,categorical_columns=['sex','educ','race','married'], update_epsilon=2)
-synth_data = newInstance.sample(df.size)
-s = synth_data.corr()
-d = df.corr()
-a2 = d.subtract(s)
-#print(a2.subtract(a))
 
 
 print("Starting DPGAN...")

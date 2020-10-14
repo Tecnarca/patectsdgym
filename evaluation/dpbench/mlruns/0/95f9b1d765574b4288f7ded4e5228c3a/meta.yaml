@@ -1,0 +1,15 @@
+artifact_uri: file:///home/tecnarca/patectgan/patectsdgym/evaluation/dpbench/mlruns/0/95f9b1d765574b4288f7ded4e5228c3a/artifacts
+end_time: 1602683250437
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+name: ''
+run_id: 95f9b1d765574b4288f7ded4e5228c3a
+run_uuid: 95f9b1d765574b4288f7ded4e5228c3a
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1602683245573
+status: 4
+tags: []
+user_id: tecnarca

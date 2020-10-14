@@ -4,7 +4,6 @@ import time
 import mlflow
 import json
 import argparse
-import textwrap
 
 import conf
 
@@ -12,8 +11,6 @@ from load_data import load_data
 
 from synthesis import run_all_synthesizers
 from evaluate import run_ml_eval, run_wasserstein, run_pMSE, run_sra
-
-from warnings import simplefilter
 
 def run(epsilons, run_name, flags, dataset):
     loaded_datasets = load_data(dataset)

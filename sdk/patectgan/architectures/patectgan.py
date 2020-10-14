@@ -125,7 +125,6 @@ class PATECTGAN(CTGANSynthesizer):
         
         data = self.transformer.transform(data)
         
-        
         data_dim = self.transformer.output_dimensions
         
         if not hasattr(self, "cond_generator"):
@@ -328,8 +327,8 @@ class PATECTGAN(CTGANSynthesizer):
 
                 self.train_eps = min((self.alphas - math.log(self.delta)) / self.l_list)
             
-            if(verbose):
-                print ('eps: {:f} \t G: {:f} \t D: {:f}'.format(self.train_eps, loss_g.detach().cpu(), loss_s.detach().cpu()))
+            #if(verbose):
+            print ('eps: {:f} \t G: {:f} \t D: {:f}'.format(self.train_eps, loss_g.detach().cpu(), loss_s.detach().cpu()))
 
 
     def WLoss(self, output, labels):

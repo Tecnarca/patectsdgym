@@ -21,14 +21,14 @@ with open("../README.md", "r", encoding="utf-8") as f:
 inline_license = "MIT"
 
 setup(
-    name="dpsdgym",
+    name="dpbench",
 
     version=SELFVERSION,
 
     description="",
     long_description=README,
     long_description_content_type="text/markdown",
-    author="Tecnarca",
+    author="Giacomo Astolfi",
     license=inline_license,
     packages=find_packages(exclude=["*.tests"]),
 
