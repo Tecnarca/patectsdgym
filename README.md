@@ -17,8 +17,8 @@ python main.py
 ```
 ToDo:
 - Add unit tests
-- Compare / Test against other losses
-- Add sra
+- Compare / Test PATECTGAN against other losses
+- Fix "need 3" attributes for DPCTGAN and DPGAN
 - Add Jupyter notebook interfaces
 - Log correct values in MLFlow
-- Save models for different (selected) epsilons
+- Save models for the various epsilons
