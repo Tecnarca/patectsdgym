@@ -8,7 +8,7 @@ from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 
 from patectgan.pytorch_synthesizer import PytorchDPSynthesizer
 from patectgan.preprocessing import GeneralTransformer
-from patectgan.architectures import DPGAN, PATEGAN, DPCTGAN, PATECTGAN 
+from patectgan.architectures import DPGAN, PATEGAN, DPCTGAN, PATECTGAN, CTGAN
 
 # Keep seed consistent for reproducibility 
 SEED = 42
@@ -18,9 +18,11 @@ BALANCE = True
 
 # Turn on/off the synthesizers you want to use in eval here
 SYNTHESIZERS = [
-#    ('dpctgan', PytorchDPSynthesizer),
+    ('ctgan', PytorchDPSynthesizer), #to be implemented (by a wrapper)
+    ('dpgan', PytorchDPSynthesizer),
+    ('dpctgan', PytorchDPSynthesizer),
     ('patectgan', PytorchDPSynthesizer),
-#    ('wpatectgan', PytorchDPSynthesizer), # with no regularization, gradients explode or vanish
+    ('wpatectgan', PytorchDPSynthesizer), # with no regularization, gradients explode or vanish
     ('patectdragan', PytorchDPSynthesizer),
     ('wpatectdragan', PytorchDPSynthesizer),
     ('pategan', PytorchDPSynthesizer),
@@ -45,7 +47,21 @@ KNOWN_MODELS_STR = ['AdaBoostClassifier', 'BaggingClassifier',
                'LogisticRegression', 'MLPClassifier',
                'GaussianNB', 'RandomForestClassifier']
 
+VERBOSE = True
+
 SYNTH_SETTINGS = {
+    'ctgan': {
+        'default': {
+            
+            'gan': CTGAN(epochs=100)
+        }
+    },
+    'dpgan': {
+        'default': {
+            'preprocessor': GeneralTransformer(),
+            'gan': DPGAN(batch_size=1280)
+        }
+    },
     'dpctgan': {
         'default': {
             

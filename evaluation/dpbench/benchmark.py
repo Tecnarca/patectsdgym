@@ -10,6 +10,9 @@ from dpbench.evaluate import run_ml_eval, run_wasserstein, run_pMSE, run_sra
 
 def run(epsilons, run_name, metric, dataset, result_path):
 
+	filepath = os.path.join(result_path, run_name + "_result.json")
+	os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
 	with mlflow.start_run(run_name=run_name):
 
 	    mlflow.log_param("epsilons", str(epsilons))
@@ -18,10 +21,10 @@ def run(epsilons, run_name, metric, dataset, result_path):
 	    
 	    loaded_datasets = load_data(dataset)
 
-	    data_dicts = run_all_synthesizers(loaded_datasets, epsilons)
+	    data_dicts = run_all_synthesizers(loaded_datasets, epsilons, result_path, run_name)
 	    
 	    if 'wasserstein' in metric:
-	        run_wasserstein(data_dicts, 50, run_name)
+	        run_wasserstein(data_dicts, 100, run_name)
 
 	    if 'pmse' in metric:
 	        run_pMSE(data_dicts, run_name)
@@ -32,9 +35,7 @@ def run(epsilons, run_name, metric, dataset, result_path):
 	        if 'sra' in metric:
 	            results = run_sra(results)
 
-	    filepath = os.path.join(result_path, run_name + "_result.json")
-	    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-	    with open(filepath, 'wb') as f:
+	    with open(filepath, 'w') as f:
 	        json.dump(results, f)
 	    mlflow.log_artifact(filepath)
 	    print(results)

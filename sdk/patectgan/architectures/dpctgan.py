@@ -50,7 +50,6 @@ class Discriminator(Module):
         torch.manual_seed(0)
         
         dim = input_dim * pack
-      #  print ('now dim is {}'.format(dim))
         self.pack = pack
         self.packdim = dim
         seq = []
@@ -138,7 +137,7 @@ class DPCTGAN(CTGANSynthesizer):
             opacus.supported_layers_grad_samplers._create_or_extend_grad_sample = _custom_create_or_extend_grad_sample
 
 
-    def train(self, data, categorical_columns=None, ordinal_columns=None, update_epsilon=None, verbose=False):
+    def train(self, data, categorical_columns=None, ordinal_columns=None, update_epsilon=None, verbose=False, mlflow=False):
         if update_epsilon:
             self.epsilon = update_epsilon
 
@@ -168,7 +167,10 @@ class DPCTGAN(CTGANSynthesizer):
 
             self.optimizerG = optim.Adam(
                 self.generator.parameters(), lr=2e-4, betas=(0.5, 0.9), weight_decay=self.l2scale)
-            self.optimizerD = optim.Adam(self.discriminator.parameters(), lr=2e-4, betas=(0.5, 0.9))
+        
+        self.optimizerD = optim.Adam(self.discriminator.parameters(), lr=4e-4, betas=(0.5, 0.9))
+        if hasattr(self, "state_dict"):
+            self.optimizerD.load_state_dict(self.state_dict)
         
         if not hasattr(self, "privacy_engine"):
             privacy_engine = opacus.PrivacyEngine(
@@ -328,17 +330,28 @@ class DPCTGAN(CTGANSynthesizer):
                     
                     self.epsilon_list.append(epsilon)
                     self.alpha_list.append(best_alpha)
-                    if self.verbose:
-                        print ('eps: {:f} \t alpha: {:f} \t G: {:f} \t D: {:f}'.format(epsilon, best_alpha, loss_g.detach().cpu(), loss_d.detach().cpu()))
+                
+
+            if self.verbose:
+                print ('eps: {:f} \t alpha: {:f} \t G: {:f} \t D: {:f}'.format(epsilon, best_alpha, loss_g.detach().cpu(), loss_d.detach().cpu()))
+
+            if(mlflow):
+                import mlflow
+                mlflow.log_metric("loss_g", float(loss_g.detach().cpu()), step=i)
+                mlflow.log_metric("loss_d", float(loss_d.detach().cpu()), step=i)
+                mlflow.log_metric("epsilon", float(epsilon), step=i)
+
 
             if not self.disabled_dp:
                 if self.epsilon < epsilon:
                     break
             self.loss_d_list.append(loss_d)
             self.loss_g_list.append(loss_g)
+
             
         privacy_engine.detach()
         self.privacy_engine = privacy_engine 
+        self.state_dict = self.optimizerD.state_dict()
 
         return self.loss_d_list, self.loss_g_list, self.epsilon_list, self.alpha_list
 

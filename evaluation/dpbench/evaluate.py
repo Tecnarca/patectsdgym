@@ -56,14 +56,13 @@ def run_wasserstein(data_dicts, iterations, run_name):
     wass_runs = []
     for d in data_dicts:
         for synth, _ in conf.SYNTHESIZERS:
+            print(d, synth)
             for i, e in enumerate(data_dicts[d][synth]):
                 arg = data_dicts[d][synth][e], data_dicts[d]['data'], iterations, i, str(d), e, synth, d
                 wass_runs.append(arg)
 
     start = time.time()
     job_num = len(wass_runs)
-    # results = Parallel(n_jobs=job_num, verbose=1, backend="loky")(
-    #    map(delayed(wasserstein_test), wass_runs))
     results = [x for x in map(wasserstein_test, wass_runs)]
     end = time.time() - start
     print('Metrics of Wasserstein randomization finished in ' + str(end))
@@ -96,8 +95,6 @@ def run_pMSE(data_dicts, run_name):
 
     start = time.time()
     job_num = len(pmse_runs)
-    # results = Parallel(n_jobs=job_num, verbose=1, backend="loky")(
-    #    map(delayed(pMSE_test), pmse_runs))
     results = [x for x in map(pMSE_test, pmse_runs)]
     end = time.time() - start
     print('Metrics of pMSE finished in ' + str(end))
@@ -275,7 +272,7 @@ def run_ml_eval(data_dict, epsilons, run_name, seed=42, test_size=0.25):
         synthetic_runs = []
         for n, _ in conf.SYNTHESIZERS:
             for i, e in enumerate(epsilons):
-                run_args = (data_dict[d][n][str(e)], target, i, test_size, seed, ['aucroc'], n, e, real, True, d)
+                run_args = (data_dict[d][n][str(e)], target, i, test_size, seed, ['aucroc'], n, e, real, False, d)
                 synthetic_runs.append(run_args)
 
         start = time.time()

@@ -6,7 +6,7 @@ import pandas as pd
 import zipfile
 
 #memory cap for Datasets (largest from UCI: bank with 6148824 bytes)
-MEM_CAP = 10000000
+MEM_CAP = 7148824
 
 
 def retrieve_dataset(dataset):

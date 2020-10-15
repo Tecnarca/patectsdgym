@@ -71,7 +71,7 @@ class DPGAN:
         self.pd_cols = None
         self.pd_index = None
 
-    def train(self, data, categorical_columns=None, ordinal_columns=None, update_epsilon=None, verbose=False):
+    def train(self, data, categorical_columns=None, ordinal_columns=None, update_epsilon=None, verbose=False, mlflow=False):
         if update_epsilon:
             self.epsilon = update_epsilon
 
@@ -172,6 +172,12 @@ class DPGAN:
 
             if(verbose):
                 print ('eps: {:f} \t alpha: {:f} \t G: {:f} \t D: {:f}'.format(eps, best_alpha, loss_g.detach().cpu(), loss_d.detach().cpu()))
+
+            if(mlflow):
+                import mlflow
+                mlflow.log_metric("loss_g", float(loss_g.detach().cpu()), step=epoch)
+                mlflow.log_metric("loss_d", float(loss_d.detach().cpu()), step=epoch)
+                mlflow.log_metric("epsilon", float(eps), step=epoch)
 
             if self.epsilon < eps:
                 break

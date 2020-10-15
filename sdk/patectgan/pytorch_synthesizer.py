@@ -22,13 +22,13 @@ class SDGYMBaseSynthesizer():
         """
         pass
 
-    def fit_sample(self, data, categorical_columns=None, ordinal_columns=None, update_epsilon=None):
+    def fit_sample(self, data, categorical_columns=None, ordinal_columns=None, update_epsilon=None, mlflow=False, verbose=False):
         """
         Common use case. Fits a synthetic data model to data, and returns
         # of samples equal to size of original dataset.
         Note data must be numpy array.
         """
-        self.fit(data, categorical_columns, ordinal_columns, update_epsilon)
+        self.fit(data=data, categorical_columns=categorical_columns, ordinal_columns=ordinal_columns, update_epsilon=update_epsilon, mlflow=mlflow, verbose=verbose)
         return self.sample(data.shape[0])
 
 
@@ -46,7 +46,7 @@ class PytorchDPSynthesizer(SDGYMBaseSynthesizer):
         self.data_columns = None
         self.flag = True
     
-    def fit(self, data, categorical_columns=tuple(), ordinal_columns=tuple(), update_epsilon=None, verbose=False):
+    def fit(self, data, categorical_columns=tuple(), ordinal_columns=tuple(), update_epsilon=None, verbose=False, mlflow=False):
         if isinstance(data, pd.DataFrame):
             self.data_columns = data.columns
 
@@ -62,9 +62,9 @@ class PytorchDPSynthesizer(SDGYMBaseSynthesizer):
                 self.preprocessor.fit(data, categorical_columns, ordinal_columns)
                 self.flag = False
             preprocessed_data = self.preprocessor.transform(data)
-            self.gan.train(preprocessed_data, categorical_columns=categorical_columns, ordinal_columns=ordinal_columns, update_epsilon=self.epsilon, verbose=verbose)
+            self.gan.train(preprocessed_data, categorical_columns=categorical_columns, ordinal_columns=ordinal_columns, update_epsilon=self.epsilon, verbose=verbose, mlflow=mlflow)
         else:
-            self.gan.train(data, categorical_columns=categorical_columns, ordinal_columns=ordinal_columns, update_epsilon=self.epsilon)
+            self.gan.train(data, categorical_columns=categorical_columns, ordinal_columns=ordinal_columns, update_epsilon=self.epsilon, verbose=verbose, mlflow=mlflow)
     
     def sample(self, n):
         synth_data = self.gan.generate(n)
