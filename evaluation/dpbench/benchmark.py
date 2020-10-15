@@ -17,7 +17,7 @@ def run(epsilons, run_name, metric, dataset, result_path):
 	    mlflow.log_param("metric", str(metric))
 	    
 	    loaded_datasets = load_data(dataset)
-	    
+
 	    data_dicts = run_all_synthesizers(loaded_datasets, epsilons)
 	    
 	    if 'wasserstein' in metric:
@@ -34,6 +34,7 @@ def run(epsilons, run_name, metric, dataset, result_path):
 
 	    filepath = os.path.join(result_path, run_name + "_result.json")
 	    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-	    with open(filepath, 'w') as f:
+	    with open(filepath, 'wb') as f:
 	        json.dump(results, f)
 	    mlflow.log_artifact(filepath)
+	    print(results)

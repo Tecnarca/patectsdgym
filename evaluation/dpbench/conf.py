@@ -21,9 +21,9 @@ SYNTHESIZERS = [
 #    ('dpctgan', PytorchDPSynthesizer),
     ('patectgan', PytorchDPSynthesizer),
 #    ('wpatectgan', PytorchDPSynthesizer), # with no regularization, gradients explode or vanish
-#    ('patectdragan', PytorchDPSynthesizer),
+    ('patectdragan', PytorchDPSynthesizer),
     ('wpatectdragan', PytorchDPSynthesizer),
-#    ('pategan', PytorchDPSynthesizer),
+    ('pategan', PytorchDPSynthesizer),
 ]
 
 # Define the defaults epsilons you want to use in eval
