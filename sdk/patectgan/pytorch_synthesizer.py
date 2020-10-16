@@ -35,6 +35,7 @@ class SDGYMBaseSynthesizer():
 class PytorchDPSynthesizer(SDGYMBaseSynthesizer):
     def __init__(self, gan, preprocessor=None, epsilon=None):
         self.preprocessor = preprocessor
+        
         self.gan = gan
         
         self.epsilon = epsilon

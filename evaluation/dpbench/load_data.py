@@ -1,5 +1,6 @@
 import requests
 import io
+import os
 import json
 from sklearn.preprocessing import LabelEncoder
 import pandas as pd
@@ -50,7 +51,8 @@ def encode_categorical(df,dataset):
 
 def load_data(datasets):
 
-    with open('datasets.json') as j:
+    datasets_json = os.path.join(os.path.dirname(os.path.abspath(__file__)),'datasets.json')
+    with open(datasets_json) as j:
         dsets = j.read()
     archive = json.loads(dsets)
 

@@ -141,6 +141,7 @@ class DPCTGAN(CTGANSynthesizer):
         if update_epsilon:
             self.epsilon = update_epsilon
 
+
         if not hasattr(self, "transformer"):
             self.transformer = DataTransformer()
             self.transformer.fit(data, discrete_columns=categorical_columns)
@@ -188,6 +189,11 @@ class DPCTGAN(CTGANSynthesizer):
         if not self.disabled_dp:
             privacy_engine.attach(self.optimizerD)
 
+        if hasattr(self, "privacy_engine"):
+            epsilon, best_alpha = self.optimizerD.privacy_engine.get_privacy_spent(self.target_delta)
+        else:
+            epsilon = 0
+
         one = torch.tensor(1, dtype=torch.float).to(self.device)
         mone = one * -1
 
@@ -201,6 +207,11 @@ class DPCTGAN(CTGANSynthesizer):
 
         steps_per_epoch = len(train_data) // self.batch_size
         for i in range(self.epochs):
+
+            if not self.disabled_dp:
+                if self.epsilon < epsilon:
+                    break
+
             for id_ in range(steps_per_epoch):
                 fakez = torch.normal(mean=mean, std=std)
 

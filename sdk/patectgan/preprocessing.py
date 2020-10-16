@@ -9,8 +9,7 @@ def get_metadata(data, categorical_columns=tuple(), ordinal_columns=tuple()):
 
     df = pd.DataFrame(data)
     for col_name in df:
-        column = df[col_name]
-
+        column = df[col_name].copy()
         if categorical_columns and col_name in categorical_columns:
             bins = column.value_counts().index.tolist()
             meta.append({

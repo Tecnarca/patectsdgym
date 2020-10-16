@@ -62,6 +62,12 @@ SYNTH_SETTINGS = {
             'gan': DPGAN(batch_size=1280)
         }
     },
+    'pategan': {
+        'default': {
+            'preprocessor': GeneralTransformer(),
+            'gan': PATEGAN(batch_size=1280)
+        }
+    },
     'dpctgan': {
         'default': {
             
@@ -91,12 +97,6 @@ SYNTH_SETTINGS = {
             
             'gan': PATECTGAN(epochs=100, loss="wasserstein", regularization="dragan")
         },
-    },
-    'pategan': {
-        'default': {
-            'preprocessor': GeneralTransformer(),
-            'gan': PATEGAN(batch_size=1280)
-        }
     }
 }
 

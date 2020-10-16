@@ -110,15 +110,22 @@ class DPGAN:
             privacy_engine = self.privacy_engine
 
         privacy_engine.attach(self.optimizer_d)
-        
+
+        if hasattr(self, "privacy_engine"):
+            epsilon, best_alpha = self.optimizer_d.privacy_engine.get_privacy_spent(self.delta)
+        else:
+            epsilon = 0
+            
         if not hasattr(self, "optimizer_g"):
             self.optimizer_g = optim.Adam(self.generator.parameters(), lr=1e-4)
-
-        eps = 0
 
         criterion = nn.BCELoss()
 
         for epoch in range(self.epochs):
+
+            if self.epsilon < epsilon:
+                break
+
             for i, data in enumerate(dataloader):
                 self.discriminator.zero_grad()
                 
