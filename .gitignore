@@ -4,3 +4,4 @@ __pycache__
 saved_models/*
 mlruns
 results
+.ipynb_checkpoints
