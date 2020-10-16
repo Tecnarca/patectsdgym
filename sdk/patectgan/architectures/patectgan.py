@@ -291,7 +291,7 @@ class PATECTGAN(CTGANSynthesizer):
 
                 self.optimizerS.step()
 
-                self.train_eps = min((self.alphas - math.log(self.delta)) / self.l_list)
+            self.train_eps = min((self.alphas - math.log(self.delta)) / self.l_list)
 
             #train generator
             fakez = torch.normal(mean=mean, std=std).to(self.device)
