@@ -2,3 +2,5 @@ patectgan.egg-info
 dpsdgym.egg-info
 __pycache__
 saved_models/*
+mlruns
+results
