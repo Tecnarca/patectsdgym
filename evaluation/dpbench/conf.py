@@ -18,11 +18,11 @@ BALANCE = True
 
 # Turn on/off the synthesizers you want to use in eval here
 SYNTHESIZERS = [
-    ('ctgan', PytorchDPSynthesizer), #to be implemented (by a wrapper)
+    ('ctgan', PytorchDPSynthesizer),
     ('dpgan', PytorchDPSynthesizer),
     ('dpctgan', PytorchDPSynthesizer),
     ('patectgan', PytorchDPSynthesizer),
-    ('wpatectgan', PytorchDPSynthesizer), # with no regularization, gradients explode or vanish
+#    ('wpatectgan', PytorchDPSynthesizer), # with no regularization, gradients explode or vanish
     ('patectdragan', PytorchDPSynthesizer),
     ('wpatectdragan', PytorchDPSynthesizer),
     ('pategan', PytorchDPSynthesizer),
