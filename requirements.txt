@@ -1,4 +1,4 @@
-pytorch
+torch
 pandas
 scikit-learn
 ctgan
